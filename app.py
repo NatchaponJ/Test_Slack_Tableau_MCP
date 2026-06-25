@@ -308,34 +308,42 @@ RESET_KEYWORDS = {"reset", "ล้างประวัติ", "เริ่ม
 
 @slack_events_adapter.on("app_mention")
 def handle_mention(event_data):
-    event_id = event_data.get("event_id")
-    if event_id in processed_events:
-        return
-    processed_events.add(event_id)
+    try:
+        event_id = event_data.get("event_id")
+        if event_id in processed_events:
+            return
+        processed_events.add(event_id)
+ 
+        event = event_data["event"]
+        question = clean_question(event["text"])
+        channel = event["channel"]
+        print(f">>> [{channel}] คำถาม: {question}", flush=True)
+ 
+        if question.lower() in RESET_KEYWORDS:
+            reset_history(channel)
+            slack_client.chat_postMessage(channel=channel, text="ล้างประวัติการสนทนาในห้องนี้แล้วครับ")
+            return
+ 
+        slack_client.chat_postMessage(channel=channel, text="กำลังประมวลผล รอสักครู่ครับ...")
 
-    event = event_data["event"]
-    question = clean_question(event["text"])
-    channel = event["channel"]
-    print(f">>> [{channel}] คำถาม: {question}")
-
-    if question.lower() in RESET_KEYWORDS:
-        reset_history(channel)
-        slack_client.chat_postMessage(channel=channel, text="ล้างประวัติการสนทนาในห้องนี้แล้วครับ")
-        return
-
-    slack_client.chat_postMessage(channel=channel, text="กำลังประมวลผล รอสักครู่ครับ...")
-
-    def process():
-        try:
-            tools = get_mcp_tools_for_groq()
-            history = get_history(channel)
-            answer = run_full_workflow_mcp(question, tools, history)
-            append_history(channel, question, answer)
-        except Exception as exc:  # noqa: BLE001
-            answer = f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
-        slack_client.chat_postMessage(channel=channel, text=answer)
-
-    threading.Thread(target=process).start()
+        def process():
+            try:
+                tools = get_mcp_tools_for_groq()
+                history = get_history(channel)
+                answer = run_full_workflow_mcp(question, tools, history)
+                append_history(channel, question, answer)
+            except Exception as exc: 
+                print(f"!! process() error: {exc!r}", flush=True)
+                answer = f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
+            try:
+                slack_client.chat_postMessage(channel=channel, text=answer)
+            except Exception as exc: 
+                print(f"!! ส่งคำตอบกลับ Slack ไม่สำเร็จ: {exc!r}", flush=True)
+ 
+        threading.Thread(target=process).start()
+ 
+    except Exception as exc: 
+        print(f"!! handle_mention ผิดพลาดร้ายแรง: {exc!r}", flush=True)
 
 
 if __name__ == "__main__":
