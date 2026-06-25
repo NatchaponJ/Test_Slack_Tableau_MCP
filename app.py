@@ -156,7 +156,6 @@ mcp_manager.start()
 print(">>> MCP server ready", flush=True)
 
 import atexit
- 
 atexit.register(mcp_manager.stop)
 
 def simplify_schema(node, _depth: int = 0):
@@ -194,6 +193,13 @@ def get_mcp_tools_for_groq() -> list[dict]:
             }
         )
     return tools
+
+try:
+    print(">>> Fetching and caching MCP tools...")
+    GLOBAL_MCP_TOOLS = get_mcp_tools_for_groq()
+    print(f">>> Cached {len(GLOBAL_MCP_TOOLS)} tools successfully.")
+except Exception as e:
+    print(f"!! Warning: Cannot fetch tools initially: {e}")
 
 def call_mcp_tool(name: str, arguments: dict) -> tuple[str, bool]:
     """เรียก tool บน MCP server คืน (ข้อความผลลัพธ์, is_error)"""
@@ -336,7 +342,7 @@ def handle_mention(event_data):
 
         def process():
             try:
-                tools = get_mcp_tools_for_groq()
+                tools = GLOBAL_MCP_TOOLS if GLOBAL_MCP_TOOLS else get_mcp_tools_for_groq()
                 history = get_history(channel)
                 answer = run_full_workflow_mcp(question, tools, history)
                 append_history(channel, question, answer)
@@ -355,11 +361,6 @@ def handle_mention(event_data):
 
 
 if __name__ == "__main__":
-    print(">>> starting MCP server (npx @tableau/mcp-server)...")
-    mcp_manager.start()
-    print(">>> MCP server ready, starting Flask app...")
+    print(">>> Starting Flask app on Railway...")
     port = int(os.getenv("PORT", "3000"))
-    try:
-        app.run(host="0.0.0.0", port=port, threaded=True)
-    finally:
-        mcp_manager.stop()
+    app.run(host="0.0.0.0", port=port, threaded=True)
