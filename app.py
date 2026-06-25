@@ -342,7 +342,8 @@ if __name__ == "__main__":
     print(">>> starting MCP server (npx @tableau/mcp-server)...")
     mcp_manager.start()
     print(">>> MCP server ready, starting Flask app...")
+    port = int(os.getenv("PORT", "3000"))
     try:
-        app.run(port=3000)
+        app.run(host="0.0.0.0", port=port, threaded=True)
     finally:
         mcp_manager.stop()
