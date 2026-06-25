@@ -17,4 +17,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=3000
 EXPOSE 3000
 
-CMD ["python", "app.py"]
+CMD gunicorn -w 1 --threads 8 --timeout 120 -b 0.0.0.0:$PORT app:app

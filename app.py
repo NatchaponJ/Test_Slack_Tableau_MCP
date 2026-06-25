@@ -151,6 +151,14 @@ mcp_server_params = StdioServerParameters(
 
 mcp_manager = MCPManager(mcp_server_params)
 
+print(">>> starting MCP server (npx @tableau/mcp-server)...", flush=True)
+mcp_manager.start()
+print(">>> MCP server ready", flush=True)
+
+import atexit
+ 
+atexit.register(mcp_manager.stop)
+
 def simplify_schema(node, _depth: int = 0):
     """
     ตัด key ที่กิน token เยอะแต่ไม่จำเป็นต่อการเรียก tool (description ยาวๆ, title, examples) 
