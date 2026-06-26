@@ -143,7 +143,7 @@ mcp_server_params = StdioServerParameters(
         "PAT_NAME": TABLEAU_TOKEN_NAME or "",
         "PAT_VALUE": TABLEAU_TOKEN_VALUE or "",
         # จำกัดจำนวนแถวที่ tool คืนมาตั้งแต่ต้นทาง กัน response ใหญ่เกิน
-        # TPM limit ของ Groq (free/on_demand tier มีแค่ 12000 token/นาที)
+        # TPM limit ของ Groq (llama free tier มีแค่ 12K / gpt 120/20b มีแค่ 8K)
         "MAX_RESULT_LIMIT": os.getenv("TABLEAU_MAX_RESULT_LIMIT", "10"),
         "INCLUDE_TOOLS": os.getenv("TABLEAU_INCLUDE_TOOLS", "datasource"),
     },
@@ -223,6 +223,8 @@ filter เฉพาะ field ที่จำเป็นต่อคำตอบ
 filtertype: Top N, Aggregate, Group by, Filter, Sort
 หากข้อมูลที่ได้กลับมาเป็นตัวเลข ให้ format เป็นตัวเลขที่อ่านง่าย (เช่น 1,234.56) และถ้าเป็นวันที่ให้ format เป็น YYYY-MM-DD
 หากคำตอบยาวเกินไป ให้สรุปเป็นประโยคสั้นๆ และบอกว่ามีข้อมูลเพิ่มเติมให้เรียกดูได้
+หากคำถามเกี่ยวข้องกับการเปรียบเทียบปี ให้ดึงข้อมูลของปีที่ถามทีละปี แล้วค่อยเอามาเปรียบเทียบกัน อย่า query ข้อมูลหลายปีพร้อมกัน
+(เช่น ถ้าถามว่า "ยอดขายปี 2022 เทียบกับปี 2023 เป็นอย่างไร" ให้ query ปี 2022 ก่อน แล้วค่อย query ปี 2023 แล้วค่อยเอามาเปรียบเทียบกัน)
 """.strip()
 
 
@@ -278,7 +280,7 @@ def run_full_workflow_mcp(question: str, tools: list[dict], history: list[dict])
             try:
                 tool_result_text, is_error = call_mcp_tool(call.function.name, args)
                 print(f"    <- {'ERROR' if is_error else 'result'}: {tool_result_text[:300]!r}")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc: 
                 tool_result_text = f"เกิดข้อผิดพลาดตอนเรียก tool: {exc}"
                 print(f"    !! tool exception: {exc}")
 
