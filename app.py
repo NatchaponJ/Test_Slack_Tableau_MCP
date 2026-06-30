@@ -7,6 +7,8 @@ import threading
 from concurrent.futures import Future
 from typing import Any
 
+from datasource_search import resolve_effective_datasource
+
 from dotenv import load_dotenv
 from flask import Flask
 from mcp import ClientSession, StdioServerParameters
@@ -59,6 +61,7 @@ processed_events: set[str] = set()
 
 _history_lock = threading.Lock()
 _channel_history: dict[str, list[dict]] = {}
+_channel_datasource: dict[str, str] = {}
 
 def get_history(channel: str) -> list[dict]:
     with _history_lock:
@@ -77,6 +80,7 @@ def append_history(channel: str, question: str, answer: str) -> None:
 def reset_history(channel: str) -> None:
     with _history_lock:
         _channel_history.pop(channel, None)
+        _channel_datasource.pop(channel, None)
 
 class MCPManager:
     """
@@ -228,11 +232,44 @@ filtertype: Top N, Aggregate, Group by, Filter, Sort
 """.strip()
 
 
-def run_full_workflow_mcp(question: str, tools: list[dict], history: list[dict]) -> str:
+def run_full_workflow_mcp(question: str, tools: list[dict], history: list[dict], channel: str | None = None) -> str:
+    selected_luid = None
+    if channel:
+        with _history_lock:
+            selected_luid = _channel_datasource.get(channel)
+
+    resolved_luid = None
+    resolved_name = None
+    if "datasource" in question.lower() or "data source" in question.lower():
+        resolved_luid, resolved_name, _ = resolve_effective_datasource(
+            question,
+            selected_luid,
+            TABLEAU_DATASOURCE_LUID,
+            lambda filter_expr: call_mcp_tool("list-datasources", {"filter": filter_expr}),
+        )
+        if resolved_luid:
+            if channel:
+                with _history_lock:
+                    _channel_datasource[channel] = resolved_luid
+            question = f"{question}\n[system_hint] datasource_luid={resolved_luid} datasource_name={resolved_name or ''}"
+    else:
+        resolved_luid, resolved_name, _ = resolve_effective_datasource(
+            question,
+            selected_luid,
+            TABLEAU_DATASOURCE_LUID,
+            lambda filter_expr: call_mcp_tool("list-datasources", {"filter": filter_expr}),
+        )
+        if resolved_luid and channel:
+            with _history_lock:
+                _channel_datasource[channel] = resolved_luid
+
+    if resolved_luid and not question.lower().startswith("[system_hint]"):
+        question = f"{question}\n[system_hint] datasource_luid={resolved_luid} datasource_name={resolved_name or ''}"
+
     messages = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT.format(default_luid=TABLEAU_DATASOURCE_LUID or "ไม่ระบุ"),
+            "content": SYSTEM_PROMPT.format(default_luid=resolved_luid or TABLEAU_DATASOURCE_LUID or "ไม่ระบุ"),
         },
         *history,
         {"role": "user", "content": question},
@@ -348,7 +385,7 @@ def handle_mention(event_data):
             try:
                 tools = GLOBAL_MCP_TOOLS if GLOBAL_MCP_TOOLS else get_mcp_tools_for_groq()
                 history = get_history(channel)
-                answer = run_full_workflow_mcp(question, tools, history)
+                answer = run_full_workflow_mcp(question, tools, history, channel)
                 append_history(channel, question, answer)
             except Exception as exc: 
                 print(f"!! process() error: {exc!r}", flush=True)
